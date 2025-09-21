@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elite Burp Suite HTTP History Analyzer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: radial-gradient(ellipse at top, #0d1421 0%, #0a0f1c 50%, #000000 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 320px;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(148, 163, 184, 0.1);
+            padding: 24px;
+            overflow-y: auto;
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .header {
+            padding: 24px 32px;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #00d4ff, #7c3aed, #f59e0b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #94a3b8;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .upload-section {
+            margin-bottom: 32px;
+        }
+
+        .upload-area {
+            border: 2px dashed #0ea5e9;
+            border-radius: 16px;
+            padding: 32px 24px;
+            text-align: center;
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.05), rgba(124, 58, 237, 0.05));
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+
+        .upload-area:hover {
+            border-color: #7c3aed;
+            background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(14, 165, 233, 0.1));
+            transform: translateY(-2px);
+        }
+
+        .upload-icon {
+            font-size: 2.5rem;
+            margin-bottom: 12px;
+            filter: drop-shadow(0 0 12px rgba(14, 165, 233, 0.5));
+        }
+
+        .upload-btn {
+            background: linear-gradient(135deg, #0ea5e9, #7c3aed);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 16px;
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(14, 165, 233, 0.3);
+        }
+
+        .stats-section {
+            margin-bottom: 32px;
+        }
+
+        .section-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.6));
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: scale(1.02);
+        }
+
+        .stat-number {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #00d4ff;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            color: #94a3b8;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .controls-section {
+            margin-bottom: 24px;
+        }
+
+        .control-group {
+            margin-bottom: 16px;
+        }
+
+        .control-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #e2e8f0;
+            margin-bottom: 8px;
+        }
+
+        .slider {
+            width: 100%;
+            height: 4px;
+            border-radius: 2px;
+            background: linear-gradient(90deg, #1e293b, #334155);
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #00d4ff, #0ea5e9);
+            cursor: pointer;
+            box-shadow: 0 0 12px rgba(0, 212, 255, 0.5);
+        }
+
+        .filter-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .filter-btn {
+            padding: 8px 12px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 6px;
+            background: rgba(30, 41, 59, 0.5);
+            color: #94a3b8;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .filter-btn.active {
+            background: linear-gradient(135deg, #00d4ff, #0ea5e9);
+            color: white;
+            border-color: transparent;
+        }
+
+        .chart-container {
+            flex: 1;
+            position: relative;
+            background: rgba(15, 23, 42, 0.3);
+            backdrop-filter: blur(10px);
+            margin: 24px 32px;
+            border-radius: 16px;
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            overflow: hidden;
+        }
+
+        .chart-header {
+            padding: 20px 24px;
+            background: rgba(15, 23, 42, 0.8);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chart-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .view-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .view-btn {
+            padding: 6px 12px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 6px;
+            background: transparent;
+            color: #94a3b8;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .view-btn.active {
+            background: #7c3aed;
+            color: white;
+            border-color: transparent;
+        }
+
+        .visualization-area {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        #networkSvg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .node {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .node:hover {
+            filter: brightness(1.2) drop-shadow(0 0 8px currentColor);
+        }
+
+        .link {
+            fill: none;
+            stroke-width: 1.5;
+            opacity: 0.6;
+            transition: all 0.3s ease;
+        }
+
+        .node-label {
+            fill: white;
+            font-size: 10px;
+            font-weight: 500;
+            text-anchor: middle;
+            pointer-events: none;
+            text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+        }
+
+        .tooltip {
+            position: absolute;
+            padding: 12px 16px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-size: 0.875rem;
+            pointer-events: none;
+            z-index: 1000;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 0.875rem;
+            color: #e2e8f0;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid rgba(0, 212, 255, 0.1);
+            border-radius: 50%;
+            border-top: 3px solid #00d4ff;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden { display: none; }
+
+        @media (max-width: 1024px) {
+            .app-container { flex-direction: column; }
+            .sidebar { width: 100%; height: auto; }
+            .main-content { height: auto; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="sidebar">
+            <div class="upload-section">
+                <div class="section-title">
+                    📁 Data Source
+                </div>
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">⬆️</div>
+                    <h3 style="margin-bottom: 8px; font-size: 1rem;">Drop XML File</h3>
+                    <p style="color: #64748b; font-size: 0.875rem;">Burp Suite export format</p>
+                    <input type="file" id="fileInput" accept=".xml" style="display: none;">
+                    <button class="upload-btn">Choose File</button>
+                </div>
+            </div>
+
+            <div class="stats-section" id="statsSection" style="display: none;">
+                <div class="section-title">
+                    📊 Statistics
+                </div>
+                <div class="stat-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="hostsCount">0</div>
+                        <div class="stat-label">Hosts</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="requestsCount">0</div>
+                        <div class="stat-label">Requests</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="paramsCount">0</div>
+                        <div class="stat-label">Parameters</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="methodsCount">0</div>
+                        <div class="stat-label">Methods</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls-section" id="controlsSection" style="display: none;">
+                <div class="section-title">
+                    ⚙️ Controls
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">Node Size</label>
+                    <input type="range" class="slider" id="nodeSizeSlider" min="5" max="25" value="15">
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label">Link Strength</label>
+                    <input type="range" class="slider" id="linkStrengthSlider" min="0.1" max="2" step="0.1" value="0.5">
+                </div>
+
+                <div class="filter-buttons">
+                    <button class="filter-btn active" data-type="all">All</button>
+                    <button class="filter-btn" data-type="host">Hosts</button>
+                    <button class="filter-btn" data-type="request">Requests</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="header">
+                <h1>🔬 Elite HTTP Traffic Analyzer</h1>
+                <p>Advanced network visualization with D3.js force simulation</p>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div class="chart-title">Network Topology</div>
+                    <div class="view-controls">
+                        <button class="view-btn active" data-view="force">Force</button>
+                        <button class="view-btn" data-view="hierarchical">Tree</button>
+                        <button class="view-btn" data-view="circular">Radial</button>
+                    </div>
+                </div>
+
+                <div class="visualization-area">
+                    <svg id="networkSvg"></svg>
+                    
+                    <div class="legend" id="legend" style="display: none;">
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #00d4ff;"></div>
+                            <span>Hosts</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #7c3aed;"></div>
+                            <span>Requests</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #f59e0b;"></div>
+                            <span>Parameters</span>
+                        </div>
+                    </div>
+
+                    <div class="loading hidden" id="loading">
+                        <div class="spinner"></div>
+                        <p>Processing network data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class EliteNetworkAnalyzer {
+            constructor() {
+                this.data = { nodes: [], links: [] };
+                this.simulation = null;
+                this.svg = null;
+                this.width = 0;
+                this.height = 0;
+                this.currentLayout = 'force';
+                this.nodeScale = 15;
+                this.linkStrength = 0.5;
+                this.activeFilter = 'all';
+                
+                this.colors = {
+                    host: '#00d4ff',
+                    request: '#7c3aed',
+                    parameter: '#f59e0b'
+                };
+                
+                this.initializeEventListeners();
+                this.setupVisualization();
+            }
+
+            initializeEventListeners() {
+                const fileInput = document.getElementById('fileInput');
+                const uploadArea = document.getElementById('uploadArea');
+                
+                uploadArea.addEventListener('click', () => fileInput.click());
+                uploadArea.addEventListener('dragover', this.handleDragOver.bind(this));
+                uploadArea.addEventListener('drop', this.handleDrop.bind(this));
+                fileInput.addEventListener('change', this.handleFileSelect.bind(this));
+                
+                // Controls
+                document.getElementById('nodeSizeSlider').addEventListener('input', (e) => {
+                    this.nodeScale = parseInt(e.target.value);
+                    this.updateVisualization();
+                });
+                
+                document.getElementById('linkStrengthSlider').addEventListener('input', (e) => {
+                    this.linkStrength = parseFloat(e.target.value);
+                    this.restartSimulation();
+                });
+                
+                // Filter buttons
+                document.querySelectorAll('.filter-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                        e.target.classList.add('active');
+                        this.activeFilter = e.target.dataset.type;
+                        this.applyFilter();
+                    });
+                });
+                
+                // View controls
+                document.querySelectorAll('.view-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+                        e.target.classList.add('active');
+                        this.currentLayout = e.target.dataset.view;
+                        this.changeLayout();
+                    });
+                });
+                
+                window.addEventListener('resize', this.handleResize.bind(this));
+            }
+
+            handleDragOver(e) {
+                e.preventDefault();
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(124, 58, 237, 0.2), rgba(14, 165, 233, 0.2))';
+            }
+
+            handleDrop(e) {
+                e.preventDefault();
+                e.currentTarget.style.background = '';
+                const files = e.dataTransfer.files;
+                if (files.length > 0) this.processFile(files[0]);
+            }
+
+            handleFileSelect(e) {
+                if (e.target.files.length > 0) this.processFile(e.target.files[0]);
+            }
+
+            async processFile(file) {
+                if (!file.name.toLowerCase().endsWith('.xml')) {
+                    this.showError('Please select a valid XML file.');
+                    return;
+                }
+
+                this.showLoading(true);
+                
+                try {
+                    const text = await file.text();
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(text, 'text/xml');
+                    
+                    if (xmlDoc.getElementsByTagName('parsererror').length > 0) {
+                        throw new Error('Invalid XML format');
+                    }
+
+                    this.data = this.parseXMLData(xmlDoc);
+                    this.updateStats();
+                    this.showControls(true);
+                    this.createVisualization();
+                    
+                } catch (error) {
+                    console.error('Error processing file:', error);
+                    this.showError('Failed to process the XML file.');
+                } finally {
+                    this.showLoading(false);
+                }
+            }
+
+            parseXMLData(xmlDoc) {
+                const items = xmlDoc.getElementsByTagName('item');
+                const nodes = new Map();
+                const links = [];
+                const stats = { hosts: new Set(), requests: 0, parameters: 0, methods: new Set() };
+
+                for (let item of items) {
+                    const host = item.getElementsByTagName('host')[0]?.textContent;
+                    const path = item.getElementsByTagName('path')[0]?.textContent;
+                    const method = item.getElementsByTagName('method')[0]?.textContent;
+                    const url = item.getElementsByTagName('url')[0]?.textContent;
+
+                    if (!host || !path || !method || !url) continue;
+
+                    stats.hosts.add(host);
+                    stats.methods.add(method);
+                    stats.requests++;
+
+                    // Add host node
+                    if (!nodes.has(host)) {
+                        nodes.set(host, {
+                            id: host,
+                            type: 'host',
+                            label: host,
+                            size: 20,
+                            color: this.colors.host,
+                            degree: 0
+                        });
+                    }
+
+                    // Add request node
+                    const requestId = `${host}${path}`;
+                    if (!nodes.has(requestId)) {
+                        nodes.set(requestId, {
+                            id: requestId,
+                            type: 'request',
+                            label: path,
+                            size: 15,
+                            color: this.colors.request,
+                            method: method,
+                            degree: 0
+                        });
+
+                        links.push({
+                            source: host,
+                            target: requestId,
+                            type: 'host-request',
+                            method: method
+                        });
+                    }
+
+                    // Extract parameters
+                    try {
+                        const urlObj = new URL(url);
+                        for (let [key, value] of urlObj.searchParams.entries()) {
+                            const paramId = `${key}=${value}`;
+                            stats.parameters++;
+                            
+                            if (!nodes.has(paramId)) {
+                                nodes.set(paramId, {
+                                    id: paramId,
+                                    type: 'parameter',
+                                    label: `${key}=${value}`,
+                                    size: 10,
+                                    color: this.colors.parameter,
+                                    degree: 0
+                                });
+                            }
+
+                            links.push({
+                                source: requestId,
+                                target: paramId,
+                                type: 'request-param'
+                            });
+                        }
+                    } catch (e) {
+                        // Skip invalid URLs
+                    }
+                }
+
+                // Calculate node degrees
+                links.forEach(link => {
+                    if (nodes.has(link.source)) nodes.get(link.source).degree++;
+                    if (nodes.has(link.target)) nodes.get(link.target).degree++;
+                });
+
+                this.stats = {
+                    hosts: stats.hosts.size,
+                    requests: stats.requests,
+                    parameters: stats.parameters,
+                    methods: stats.methods.size
+                };
+
+                return {
+                    nodes: Array.from(nodes.values()),
+                    links: links
+                };
+            }
+
+            updateStats() {
+                document.getElementById('hostsCount').textContent = this.stats.hosts;
+                document.getElementById('requestsCount').textContent = this.stats.requests;
+                document.getElementById('paramsCount').textContent = this.stats.parameters;
+                document.getElementById('methodsCount').textContent = this.stats.methods;
+            }
+
+            setupVisualization() {
+                // Wait for DOM to be ready and get actual dimensions
+                setTimeout(() => {
+                    const container = document.querySelector('.visualization-area');
+                    const rect = container.getBoundingClientRect();
+                    this.width = rect.width;
+                    this.height = rect.height;
+                    
+                    console.log('Container dimensions:', this.width, this.height); // Debug
+                    
+                    // No padding - use full space
+                    this.viewWidth = this.width;
+                    this.viewHeight = this.height;
+
+                    this.svg = d3.select('#networkSvg')
+                        .attr('width', this.width)
+                        .attr('height', this.height)
+                        .attr('viewBox', `0 0 ${this.width} ${this.height}`)
+                        .style('position', 'absolute')
+                        .style('top', '0')
+                        .style('left', '0');
+
+                    // Clear any existing content
+                    this.svg.selectAll('*').remove();
+
+                    // Add zoom behavior
+                    const zoom = d3.zoom()
+                        .scaleExtent([0.1, 4])
+                        .on('zoom', (event) => {
+                            this.svg.select('.zoom-group')
+                                .attr('transform', event.transform);
+                        });
+
+                    this.svg.call(zoom);
+
+                    // Create main group for zooming - no offset
+                    this.svg.append('g').attr('class', 'zoom-group');
+                }, 100);
+            }
+
+            createVisualization() {
+                if (!this.data.nodes.length) return;
+
+                // Clear existing visualization
+                this.svg.select('.zoom-group').selectAll('*').remove();
+
+                // Create simulation with full area usage
+                this.simulation = d3.forceSimulation(this.data.nodes)
+                    .force('link', d3.forceLink(this.data.links).id(d => d.id).strength(this.linkStrength))
+                    .force('charge', d3.forceManyBody().strength(-400))
+                    .force('center', d3.forceCenter(this.viewWidth / 2, this.viewHeight / 2))
+                    .force('collision', d3.forceCollide().radius(d => d.size + 8))
+                    .force('x', d3.forceX(this.viewWidth / 2).strength(0.1))
+                    .force('y', d3.forceY(this.viewHeight / 2).strength(0.1));
+
+                // Create links
+                this.linkElements = this.svg.select('.zoom-group')
+                    .append('g')
+                    .attr('class', 'links')
+                    .selectAll('.link')
+                    .data(this.data.links)
+                    .enter()
+                    .append('line')
+                    .attr('class', 'link')
+                    .style('stroke', '#64748b')
+                    .style('stroke-width', 1.5)
+                    .style('opacity', 0.6);
+
+                // Create nodes
+                this.nodeElements = this.svg.select('.zoom-group')
+                    .append('g')
+                    .attr('class', 'nodes')
+                    .selectAll('.node')
+                    .data(this.data.nodes)
+                    .enter()
+                    .append('g')
+                    .attr('class', 'node')
+                    .call(d3.drag()
+                        .on('start', this.dragstarted.bind(this))
+                        .on('drag', this.dragged.bind(this))
+                        .on('end', this.dragended.bind(this)));
+
+                // Add circles to nodes
+                this.nodeElements.append('circle')
+                    .attr('r', d => d.size * (this.nodeScale / 15))
+                    .style('fill', d => d.color)
+                    .style('stroke', '#ffffff')
+                    .style('stroke-width', 2)
+                    .style('filter', 'drop-shadow(0px 2px 4px rgba(0,0,0,0.3))');
+
+                // Add labels
+                this.nodeElements.append('text')
+                    .attr('class', 'node-label')
+                    .attr('dy', d => d.size * (this.nodeScale / 15) + 15)
+                    .text(d => d.label.length > 20 ? d.label.substring(0, 20) + '...' : d.label)
+                    .style('font-size', '10px')
+                    .style('text-anchor', 'middle')
+                    .style('fill', '#ffffff')
+                    .style('text-shadow', '0 0 4px rgba(0,0,0,0.8)');
+
+                // Add tooltip
+                this.addTooltip();
+
+                // Start simulation
+                this.simulation.on('tick', this.ticked.bind(this));
+
+                // Show legend
+                document.getElementById('legend').style.display = 'block';
+                document.getElementById('statsSection').style.display = 'block';
+            }
+
+            addTooltip() {
+                const tooltip = d3.select('body').append('div')
+                    .attr('class', 'tooltip')
+                    .style('opacity', 0);
+
+                this.nodeElements
+                    .on('mouseover', (event, d) => {
+                        tooltip.transition().duration(200).style('opacity', 1);
+                        tooltip.html(this.getTooltipContent(d))
+                            .style('left', (event.pageX + 10) + 'px')
+                            .style('top', (event.pageY - 10) + 'px');
+                    })
+                    .on('mouseout', () => {
+                        tooltip.transition().duration(200).style('opacity', 0);
+                    });
+            }
+
+            getTooltipContent(d) {
+                let content = `<strong>${d.label}</strong><br>Type: ${d.type}<br>Connections: ${d.degree}`;
+                if (d.method) content += `<br>Method: ${d.method}`;
+                return content;
+            }
+
+            ticked() {
+                this.linkElements
+                    .attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+
+                this.nodeElements
+                    .attr('transform', d => `translate(${d.x},${d.y})`);
+            }
+
+            dragstarted(event, d) {
+                if (!event.active) this.simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            dragended(event, d) {
+                if (!event.active) this.simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+
+            updateVisualization() {
+                if (!this.nodeElements) return;
+                
+                this.nodeElements.select('circle')
+                    .attr('r', d => d.size * (this.nodeScale / 15));
+                
+                this.nodeElements.select('text')
+                    .attr('dy', d => d.size * (this.nodeScale / 15) + 15);
+            }
+
+            restartSimulation() {
+                if (this.simulation) {
+                    this.simulation
+                        .force('link').strength(this.linkStrength);
+                    this.simulation.alpha(1).restart();
+                }
+            }
+
+            applyFilter() {
+                if (!this.nodeElements) return;
+
+                this.nodeElements
+                    .style('opacity', d => {
+                        if (this.activeFilter === 'all') return 1;
+                        return d.type === this.activeFilter ? 1 : 0.2;
+                    });
+
+                this.linkElements
+                    .style('opacity', d => {
+                        if (this.activeFilter === 'all') return 0.6;
+                        const sourceNode = this.data.nodes.find(n => n.id === d.source.id || n.id === d.source);
+                        const targetNode = this.data.nodes.find(n => n.id === d.target.id || n.id === d.target);
+                        
+                        if (this.activeFilter === 'host') {
+                            return (sourceNode?.type === 'host' || targetNode?.type === 'host') ? 0.6 : 0.1;
+                        }
+                        if (this.activeFilter === 'request') {
+                            return (sourceNode?.type === 'request' || targetNode?.type === 'request') ? 0.6 : 0.1;
+                        }
+                        return 0.1;
+                    });
+            }
+
+            changeLayout() {
+                if (!this.simulation) return;
+
+                switch (this.currentLayout) {
+                    case 'force':
+                        this.setupForceLayout();
+                        break;
+                    case 'hierarchical':
+                        this.setupHierarchicalLayout();
+                        break;
+                    case 'circular':
+                        this.setupCircularLayout();
+                        break;
+                }
+            }
+
+            setupForceLayout() {
+                this.simulation
+                    .force('charge', d3.forceManyBody().strength(-400))
+                    .force('center', d3.forceCenter(this.viewWidth / 2, this.viewHeight / 2))
+                    .force('collision', d3.forceCollide().radius(d => d.size + 8))
+                    .force('x', d3.forceX(this.viewWidth / 2).strength(0.1))
+                    .force('y', d3.forceY(this.viewHeight / 2).strength(0.1))
+                    .alpha(1)
+                    .restart();
+            }
+
+            setupHierarchicalLayout() {
+                // Create hierarchy using full available space
+                const hosts = this.data.nodes.filter(n => n.type === 'host');
+                const requests = this.data.nodes.filter(n => n.type === 'request');
+                const parameters = this.data.nodes.filter(n => n.type === 'parameter');
+
+                const margin = 40;
+                const usableWidth = this.viewWidth - (margin * 2);
+                const usableHeight = this.viewHeight - (margin * 2);
+
+                // Position hosts at top - spread across full width
+                hosts.forEach((node, i) => {
+                    node.fx = margin + (usableWidth / Math.max(hosts.length - 1, 1)) * i;
+                    node.fy = margin;
+                });
+
+                // Position requests in middle - spread across full width
+                requests.forEach((node, i) => {
+                    node.fx = margin + (usableWidth / Math.max(requests.length - 1, 1)) * i;
+                    node.fy = this.viewHeight / 2;
+                });
+
+                // Position parameters at bottom - spread across full width
+                parameters.forEach((node, i) => {
+                    node.fx = margin + (usableWidth / Math.max(parameters.length - 1, 1)) * i;
+                    node.fy = usableHeight + margin;
+                });
+
+                this.simulation.alpha(1).restart();
+            }
+
+            setupCircularLayout() {
+                // Use larger radius to fill more space
+                const radius = Math.min(this.viewWidth, this.viewHeight) * 0.4;
+                const centerX = this.viewWidth / 2;
+                const centerY = this.viewHeight / 2;
+
+                this.data.nodes.forEach((node, i) => {
+                    const angle = (2 * Math.PI * i) / this.data.nodes.length;
+                    node.fx = centerX + radius * Math.cos(angle);
+                    node.fy = centerY + radius * Math.sin(angle);
+                });
+
+                this.simulation.alpha(1).restart();
+            }
+
+            showLoading(show) {
+                document.getElementById('loading').classList.toggle('hidden', !show);
+            }
+
+            showControls(show) {
+                document.getElementById('controlsSection').style.display = show ? 'block' : 'none';
+            }
+
+            showError(message) {
+                alert(message); // Simple error handling - could be enhanced
+            }
+
+            handleResize() {
+                const container = document.querySelector('.visualization-area');
+                const rect = container.getBoundingClientRect();
+                this.width = rect.width;
+                this.height = rect.height;
+                
+                // Minimal padding for full space usage
+                this.padding = 20;
+                this.viewWidth = this.width - (this.padding * 2);
+                this.viewHeight = this.height - (this.padding * 2);
+
+                this.svg
+                    .attr('width', this.width)
+                    .attr('height', this.height)
+                    .style('width', '100%')
+                    .style('height', '100%');
+                
+                // Update zoom group transform
+                this.svg.select('.zoom-group')
+                    .attr('transform', `translate(${this.padding}, ${this.padding})`);
+
+                if (this.simulation) {
+                    this.simulation
+                        .force('center', d3.forceCenter(this.viewWidth / 2, this.viewHeight / 2))
+                        .force('x', d3.forceX(this.viewWidth / 2).strength(0.1))
+                        .force('y', d3.forceY(this.viewHeight / 2).strength(0.1))
+                        .alpha(0.3)
+                        .restart();
+                }
+            }
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            new EliteNetworkAnalyzer();
+        });
+    </script>
+</body>
+</html>
