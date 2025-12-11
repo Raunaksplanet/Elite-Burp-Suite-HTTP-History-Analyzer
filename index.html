@@ -3,1029 +3,913 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Elite Burp Suite HTTP History Analyzer</title>
+    <title>Burp Suite Traffic Visualizer Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --bg-dark: #0f172a;
+            --bg-panel: #1e293b;
+            --border: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #38bdf8;
+            --accent-glow: rgba(56, 189, 248, 0.2);
+            --method-get: #3b82f6;
+            --method-post: #10b981;
+            --method-put: #f59e0b;
+            --method-delete: #ef4444;
+            --node-host: #f472b6;
+            --node-param: #a8a29e;
         }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-            background: radial-gradient(ellipse at top, #0d1421 0%, #0a0f1c 50%, #000000 100%);
-            color: #ffffff;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-        .app-container {
-            display: flex;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
             height: 100vh;
+            overflow: hidden;
+            display: flex;
         }
 
-        .sidebar {
-            width: 320px;
-            background: rgba(15, 23, 42, 0.95);
-            backdrop-filter: blur(20px);
-            border-right: 1px solid rgba(148, 163, 184, 0.1);
-            padding: 24px;
-            overflow-y: auto;
-            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
-        }
-
-        .main-content {
-            flex: 1;
+        /* Sidebar */
+        aside {
+            width: 340px;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
-            position: relative;
+            z-index: 10;
+            box-shadow: 4px 0 15px rgba(0,0,0,0.3);
+            flex-shrink: 0;
         }
 
-        .header {
-            padding: 24px 32px;
-            background: rgba(15, 23, 42, 0.8);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
-        }
-
-        .header h1 {
-            font-size: 2rem;
+        .brand {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            font-size: 1.2rem;
             font-weight: 700;
-            background: linear-gradient(135deg, #00d4ff, #7c3aed, #f59e0b);
+            background: linear-gradient(to right, #38bdf8, #818cf8);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 8px;
         }
 
-        .header p {
-            color: #94a3b8;
-            font-size: 1rem;
-            font-weight: 500;
+        .controls {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
         }
 
-        .upload-section {
-            margin-bottom: 32px;
-        }
+        .controls::-webkit-scrollbar { width: 6px; }
+        .controls::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-        .upload-area {
-            border: 2px dashed #0ea5e9;
-            border-radius: 16px;
-            padding: 32px 24px;
-            text-align: center;
-            background: linear-gradient(135deg, rgba(14, 165, 233, 0.05), rgba(124, 58, 237, 0.05));
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            cursor: pointer;
-        }
-
-        .upload-area:hover {
-            border-color: #7c3aed;
-            background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(14, 165, 233, 0.1));
-            transform: translateY(-2px);
-        }
-
-        .upload-icon {
-            font-size: 2.5rem;
-            margin-bottom: 12px;
-            filter: drop-shadow(0 0 12px rgba(14, 165, 233, 0.5));
-        }
-
-        .upload-btn {
-            background: linear-gradient(135deg, #0ea5e9, #7c3aed);
-            color: white;
-            border: none;
-            padding: 12px 24px;
+        /* Upload Area */
+        .drop-zone {
+            border: 2px dashed var(--border);
             border-radius: 8px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-top: 16px;
-        }
-
-        .upload-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 24px rgba(14, 165, 233, 0.3);
-        }
-
-        .stats-section {
-            margin-bottom: 32px;
-        }
-
-        .section-title {
-            font-size: 1.125rem;
-            font-weight: 600;
-            color: #e2e8f0;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .stat-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-        }
-
-        .stat-card {
-            background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.6));
-            border: 1px solid rgba(148, 163, 184, 0.1);
-            border-radius: 12px;
-            padding: 16px;
+            padding: 20px 16px;
             text-align: center;
-            backdrop-filter: blur(10px);
-            transition: transform 0.3s ease;
-        }
-
-        .stat-card:hover {
-            transform: scale(1.02);
-        }
-
-        .stat-number {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #00d4ff;
-            margin-bottom: 4px;
-        }
-
-        .stat-label {
-            color: #94a3b8;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .controls-section {
+            cursor: pointer;
+            transition: all 0.2s;
+            background: rgba(255,255,255,0.02);
             margin-bottom: 24px;
         }
 
-        .control-group {
-            margin-bottom: 16px;
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--accent);
+            background: var(--accent-glow);
         }
 
-        .control-label {
-            display: block;
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: #e2e8f0;
-            margin-bottom: 8px;
+        .drop-icon { font-size: 1.8rem; margin-bottom: 10px; display: block; }
+        .drop-text { font-size: 0.85rem; color: var(--text-secondary); }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 24px;
         }
 
-        .slider {
+        .stat-box {
+            background: rgba(0,0,0,0.2);
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-val { font-size: 1.1rem; font-weight: 700; color: var(--accent); }
+        .stat-label { font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; }
+
+        /* Inputs */
+        .control-group { margin-bottom: 20px; }
+        .control-label { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 8px; color: var(--text-secondary); font-weight: 500; }
+        
+        input[type="range"] {
             width: 100%;
             height: 4px;
+            background: var(--border);
             border-radius: 2px;
-            background: linear-gradient(90deg, #1e293b, #334155);
+            appearance: none;
             outline: none;
-            -webkit-appearance: none;
         }
-
-        .slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
+        
+        input[type="range"]::-webkit-slider-thumb {
             appearance: none;
             width: 16px;
             height: 16px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #00d4ff, #0ea5e9);
+            background: var(--accent);
             cursor: pointer;
-            box-shadow: 0 0 12px rgba(0, 212, 255, 0.5);
+            transition: transform 0.1s;
         }
 
-        .filter-buttons {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 8px;
-            margin-top: 16px;
+        /* Filter Inputs */
+        .input-wrapper {
+            position: relative;
+            margin-bottom: 10px;
         }
-
-        .filter-btn {
+        
+        .filter-input {
+            width: 100%;
+            background: rgba(0,0,0,0.2);
+            border: 1px solid var(--border);
             padding: 8px 12px;
-            border: 1px solid rgba(148, 163, 184, 0.2);
             border-radius: 6px;
-            background: rgba(30, 41, 59, 0.5);
-            color: #94a3b8;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem;
+            transition: border-color 0.2s;
+        }
+        
+        .filter-input:focus { outline: none; border-color: var(--accent); }
+
+        /* Method Toggles */
+        .method-toggles {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .method-btn {
+            padding: 6px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-secondary);
             font-size: 0.75rem;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s;
+            text-align: center;
         }
 
-        .filter-btn.active {
-            background: linear-gradient(135deg, #00d4ff, #0ea5e9);
-            color: white;
-            border-color: transparent;
+        .method-btn.active { color: #fff; font-weight: 600; border: none; }
+        .m-get.active { background: var(--method-get); }
+        .m-post.active { background: var(--method-post); }
+        .m-put.active { background: var(--method-put); }
+        .m-del.active { background: var(--method-delete); }
+
+        /* Buttons */
+        .btn-group { display: flex; gap: 8px; margin-bottom: 12px; }
+        
+        .btn {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-secondary);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
         }
 
-        .chart-container {
+        .btn:hover { background: rgba(255,255,255,0.05); color: var(--text-primary); }
+        .btn.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+
+        .btn-reset {
+            width: 100%;
+            margin-top: 10px;
+            padding: 8px;
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .btn-reset:hover { background: rgba(239, 68, 68, 0.2); }
+
+        .separator { height: 1px; background: var(--border); margin: 20px 0; }
+
+        /* Main Canvas */
+        main {
             flex: 1;
             position: relative;
-            background: rgba(15, 23, 42, 0.3);
-            backdrop-filter: blur(10px);
-            margin: 24px 32px;
-            border-radius: 16px;
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
             overflow: hidden;
         }
 
-        .chart-header {
-            padding: 20px 24px;
-            background: rgba(15, 23, 42, 0.8);
-            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .chart-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: #e2e8f0;
-        }
-
-        .view-controls {
-            display: flex;
-            gap: 8px;
-        }
-
-        .view-btn {
-            padding: 6px 12px;
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            border-radius: 6px;
-            background: transparent;
-            color: #94a3b8;
-            font-size: 0.75rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .view-btn.active {
-            background: #7c3aed;
-            color: white;
-            border-color: transparent;
-        }
-
-        .visualization-area {
-            flex: 1;
-            position: relative;
+        #graph-container {
             width: 100%;
             height: 100%;
+            cursor: move;
         }
 
-        #networkSvg {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
-
-        .node {
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .node:hover {
-            filter: brightness(1.2) drop-shadow(0 0 8px currentColor);
-        }
-
-        .link {
-            fill: none;
-            stroke-width: 1.5;
-            opacity: 0.6;
-            transition: all 0.3s ease;
-        }
-
-        .node-label {
-            fill: white;
+        /* SVG Elements */
+        .node circle { stroke: #fff; stroke-width: 1.5px; transition: all 0.3s; }
+        .node:hover circle { stroke: var(--accent); stroke-width: 3px; filter: drop-shadow(0 0 8px var(--accent)); }
+        .node text {
+            font-family: 'Inter', sans-serif;
             font-size: 10px;
-            font-weight: 500;
-            text-anchor: middle;
+            fill: var(--text-primary);
             pointer-events: none;
-            text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
         }
-
-        .tooltip {
-            position: absolute;
-            padding: 12px 16px;
-            background: rgba(0, 0, 0, 0.9);
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            border-radius: 8px;
-            color: white;
-            font-size: 0.875rem;
-            pointer-events: none;
-            z-index: 1000;
-            backdrop-filter: blur(20px);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-
+        .link { stroke: #475569; stroke-opacity: 0.4; transition: stroke-width 0.3s; }
+        
+        /* Legend */
         .legend {
             position: absolute;
             top: 20px;
             right: 20px;
             background: rgba(15, 23, 42, 0.9);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(148, 163, 184, 0.1);
-            border-radius: 12px;
-            padding: 16px;
+            backdrop-filter: blur(8px);
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-size: 0.8rem;
+            pointer-events: none;
         }
+        .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; }
 
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 8px;
-            font-size: 0.875rem;
-            color: #e2e8f0;
-        }
-
-        .legend-color {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-        }
-
-        .loading {
+        /* Tooltip */
+        #tooltip {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
+            opacity: 0;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid var(--border);
+            padding: 12px;
+            border-radius: 6px;
+            pointer-events: none;
+            max-width: 300px;
+            z-index: 100;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            transition: opacity 0.1s;
         }
+        .tt-title { font-weight: 700; color: var(--accent); margin-bottom: 4px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+        .tt-row { display: flex; justify-content: space-between; gap: 12px; font-size: 0.8rem; margin-top: 4px; color: var(--text-secondary); }
+        .tt-val { color: var(--text-primary); font-family: monospace; word-break: break-all; }
 
-        .spinner {
-            width: 48px;
-            height: 48px;
-            border: 3px solid rgba(0, 212, 255, 0.1);
-            border-radius: 50%;
-            border-top: 3px solid #00d4ff;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 16px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .hidden { display: none; }
-
-        @media (max-width: 1024px) {
-            .app-container { flex-direction: column; }
-            .sidebar { width: 100%; height: auto; }
-            .main-content { height: auto; }
-        }
     </style>
 </head>
 <body>
-    <div class="app-container">
-        <div class="sidebar">
-            <div class="upload-section">
-                <div class="section-title">
-                    📁 Data Source
-                </div>
-                <div class="upload-area" id="uploadArea">
-                    <div class="upload-icon">⬆️</div>
-                    <h3 style="margin-bottom: 8px; font-size: 1rem;">Drop XML File</h3>
-                    <p style="color: #64748b; font-size: 0.875rem;">Burp Suite export format</p>
-                    <input type="file" id="fileInput" accept=".xml" style="display: none;">
-                    <button class="upload-btn">Choose File</button>
-                </div>
+
+<aside>
+    <div class="brand">Burp Visualizer Pro</div>
+    
+    <div class="controls">
+        <div class="drop-zone" id="dropZone">
+            <span class="drop-icon">📂</span>
+            <div class="drop-text">Drag & Drop Burp XML<br>or Click to Browse</div>
+            <input type="file" id="fileInput" accept=".xml" hidden>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-val" id="count-hosts">0</div>
+                <div class="stat-label">Hosts</div>
             </div>
-
-            <div class="stats-section" id="statsSection" style="display: none;">
-                <div class="section-title">
-                    📊 Statistics
-                </div>
-                <div class="stat-grid">
-                    <div class="stat-card">
-                        <div class="stat-number" id="hostsCount">0</div>
-                        <div class="stat-label">Hosts</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="requestsCount">0</div>
-                        <div class="stat-label">Requests</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="paramsCount">0</div>
-                        <div class="stat-label">Parameters</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="methodsCount">0</div>
-                        <div class="stat-label">Methods</div>
-                    </div>
-                </div>
+            <div class="stat-box">
+                <div class="stat-val" id="count-reqs">0</div>
+                <div class="stat-label">Reqs</div>
             </div>
-
-            <div class="controls-section" id="controlsSection" style="display: none;">
-                <div class="section-title">
-                    ⚙️ Controls
-                </div>
-                
-                <div class="control-group">
-                    <label class="control-label">Node Size</label>
-                    <input type="range" class="slider" id="nodeSizeSlider" min="5" max="25" value="15">
-                </div>
-
-                <div class="control-group">
-                    <label class="control-label">Link Strength</label>
-                    <input type="range" class="slider" id="linkStrengthSlider" min="0.1" max="2" step="0.1" value="0.5">
-                </div>
-
-                <div class="filter-buttons">
-                    <button class="filter-btn active" data-type="all">All</button>
-                    <button class="filter-btn" data-type="host">Hosts</button>
-                    <button class="filter-btn" data-type="request">Requests</button>
-                </div>
+            <div class="stat-box">
+                <div class="stat-val" id="count-params">0</div>
+                <div class="stat-label">Params</div>
             </div>
         </div>
 
-        <div class="main-content">
-            <div class="header">
-                <h1>🔬 Elite HTTP Traffic Analyzer</h1>
-                <p>Advanced network visualization with D3.js force simulation</p>
-            </div>
-
-            <div class="chart-container">
-                <div class="chart-header">
-                    <div class="chart-title">Network Topology</div>
-                    <div class="view-controls">
-                        <button class="view-btn active" data-view="force">Force</button>
-                        <button class="view-btn" data-view="hierarchical">Tree</button>
-                        <button class="view-btn" data-view="circular">Radial</button>
-                    </div>
-                </div>
-
-                <div class="visualization-area">
-                    <svg id="networkSvg"></svg>
-                    
-                    <div class="legend" id="legend" style="display: none;">
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #00d4ff;"></div>
-                            <span>Hosts</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #7c3aed;"></div>
-                            <span>Requests</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #f59e0b;"></div>
-                            <span>Parameters</span>
-                        </div>
-                    </div>
-
-                    <div class="loading hidden" id="loading">
-                        <div class="spinner"></div>
-                        <p>Processing network data...</p>
-                    </div>
-                </div>
+        <div class="control-group">
+            <div class="control-label">Layout</div>
+            <div class="btn-group">
+                <button class="btn active" onclick="app.setLayout('force', this)">Cluster</button>
+                <button class="btn" onclick="app.setLayout('tree', this)">Tree</button>
+                <button class="btn" onclick="app.setLayout('radial', this)">Radial</button>
             </div>
         </div>
+
+        <div class="control-group">
+            <div class="control-label">
+                <span>Node Spacing</span>
+                <span id="spacing-val">50</span>
+            </div>
+            <input type="range" id="spacingSlider" min="20" max="200" value="50">
+        </div>
+
+        <div class="separator"></div>
+
+        <div class="control-group">
+            <div class="control-label">FILTERS (AUTO-UPDATES)</div>
+            
+            <div class="input-wrapper">
+                <input type="text" class="filter-input" id="filter-host" placeholder="Filter by Host..." oninput="app.applyFilters()">
+            </div>
+
+            <div class="input-wrapper">
+                <input type="text" class="filter-input" id="filter-path" placeholder="Filter by Path..." oninput="app.applyFilters()">
+            </div>
+
+            <div class="control-label" style="font-size: 0.75rem; margin-top:10px;">HTTP Methods</div>
+            <div class="method-toggles">
+                <button class="method-btn m-get active" onclick="app.toggleMethod('GET', this)">GET</button>
+                <button class="method-btn m-post active" onclick="app.toggleMethod('POST', this)">POST</button>
+                <button class="method-btn m-put active" onclick="app.toggleMethod('PUT', this)">PUT</button>
+                <button class="method-btn m-del active" onclick="app.toggleMethod('DELETE', this)">DELETE</button>
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+                <input type="text" class="filter-input" id="filter-status" placeholder="Status Code" oninput="app.applyFilters()">
+                <input type="text" class="filter-input" id="filter-param" placeholder="Param Name" oninput="app.applyFilters()">
+            </div>
+            
+            <button class="btn-reset" onclick="app.resetFilters()">Reset Filters</button>
+        </div>
+        
+        <div class="separator"></div>
+        <button class="btn" style="width:100%; border-color: var(--accent); color: var(--accent); background: rgba(56, 189, 248, 0.1);" onclick="app.autoFit(true)">
+            🎯 Auto-Fit to Data
+        </button>
+    </div>
+</aside>
+
+<main>
+    <div id="graph-container"></div>
+    
+    <div class="legend">
+        <div class="legend-item"><div class="dot" style="background:var(--node-host)"></div>Host</div>
+        <div class="legend-item"><div class="dot" style="background:var(--method-get)"></div>GET Request</div>
+        <div class="legend-item"><div class="dot" style="background:var(--method-post)"></div>POST Request</div>
+        <div class="legend-item"><div class="dot" style="background:var(--method-delete)"></div>DELETE/Other</div>
+        <div class="legend-item"><div class="dot" style="background:var(--node-param)"></div>Parameter</div>
     </div>
 
-    <script>
-        class EliteNetworkAnalyzer {
-            constructor() {
-                this.data = { nodes: [], links: [] };
-                this.simulation = null;
-                this.svg = null;
-                this.width = 0;
-                this.height = 0;
-                this.currentLayout = 'force';
-                this.nodeScale = 15;
-                this.linkStrength = 0.5;
-                this.activeFilter = 'all';
-                
-                this.colors = {
-                    host: '#00d4ff',
-                    request: '#7c3aed',
-                    parameter: '#f59e0b'
-                };
-                
-                this.initializeEventListeners();
-                this.setupVisualization();
+    <div id="tooltip"></div>
+</main>
+
+<script>
+class BurpVisualizer {
+    constructor() {
+        this.width = 0;
+        this.height = 0;
+        this.data = { nodes: [], links: [] };
+        this.simulation = null;
+        this.svg = null;
+        this.g = null;
+        this.zoom = null;
+        this.layout = 'force'; 
+        
+        this.colors = {
+            host: '#f472b6',
+            param: '#a8a29e',
+            GET: '#3b82f6',
+            POST: '#10b981',
+            PUT: '#f59e0b',
+            DELETE: '#ef4444',
+            default: '#64748b'
+        };
+
+        this.filters = {
+            host: '',
+            path: '',
+            status: '',
+            param: '',
+            methods: new Set(['GET', 'POST', 'PUT', 'DELETE'])
+        };
+
+        this.init();
+    }
+
+    init() {
+        const container = document.getElementById('graph-container');
+        this.width = container.clientWidth;
+        this.height = container.clientHeight;
+
+        this.svg = d3.select('#graph-container').append('svg')
+            .attr('width', '100%')
+            .attr('height', '100%')
+            .on('click', (e) => { if(e.target.tagName === 'svg') this.hideTooltip(); });
+
+        this.svg.append('defs').append('marker')
+            .attr('id', 'arrowhead')
+            .attr('viewBox', '0 -5 10 10')
+            .attr('refX', 22)
+            .attr('refY', 0)
+            .attr('orient', 'auto')
+            .attr('markerWidth', 5)
+            .attr('markerHeight', 5)
+            .append('path')
+            .attr('d', 'M0,-5L10,0L0,5')
+            .attr('fill', '#475569')
+            .style('opacity', 0.6);
+
+        this.g = this.svg.append('g');
+
+        this.zoom = d3.zoom()
+            .scaleExtent([0.1, 8])
+            .on('zoom', (event) => this.g.attr('transform', event.transform));
+
+        this.svg.call(this.zoom);
+
+        // Resize handler
+        new ResizeObserver(() => {
+            this.width = container.clientWidth;
+            this.height = container.clientHeight;
+            if(this.simulation) {
+                this.simulation.force("center", d3.forceCenter(this.width / 2, this.height / 2));
+                this.simulation.alpha(0.3).restart();
             }
-
-            initializeEventListeners() {
-                const fileInput = document.getElementById('fileInput');
-                const uploadArea = document.getElementById('uploadArea');
-                
-                uploadArea.addEventListener('click', () => fileInput.click());
-                uploadArea.addEventListener('dragover', this.handleDragOver.bind(this));
-                uploadArea.addEventListener('drop', this.handleDrop.bind(this));
-                fileInput.addEventListener('change', this.handleFileSelect.bind(this));
-                
-                // Controls
-                document.getElementById('nodeSizeSlider').addEventListener('input', (e) => {
-                    this.nodeScale = parseInt(e.target.value);
-                    this.updateVisualization();
-                });
-                
-                document.getElementById('linkStrengthSlider').addEventListener('input', (e) => {
-                    this.linkStrength = parseFloat(e.target.value);
-                    this.restartSimulation();
-                });
-                
-                // Filter buttons
-                document.querySelectorAll('.filter-btn').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-                        e.target.classList.add('active');
-                        this.activeFilter = e.target.dataset.type;
-                        this.applyFilter();
-                    });
-                });
-                
-                // View controls
-                document.querySelectorAll('.view-btn').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-                        e.target.classList.add('active');
-                        this.currentLayout = e.target.dataset.view;
-                        this.changeLayout();
-                    });
-                });
-                
-                window.addEventListener('resize', this.handleResize.bind(this));
-            }
-
-            handleDragOver(e) {
-                e.preventDefault();
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(124, 58, 237, 0.2), rgba(14, 165, 233, 0.2))';
-            }
-
-            handleDrop(e) {
-                e.preventDefault();
-                e.currentTarget.style.background = '';
-                const files = e.dataTransfer.files;
-                if (files.length > 0) this.processFile(files[0]);
-            }
-
-            handleFileSelect(e) {
-                if (e.target.files.length > 0) this.processFile(e.target.files[0]);
-            }
-
-            async processFile(file) {
-                if (!file.name.toLowerCase().endsWith('.xml')) {
-                    this.showError('Please select a valid XML file.');
-                    return;
-                }
-
-                this.showLoading(true);
-                
-                try {
-                    const text = await file.text();
-                    const parser = new DOMParser();
-                    const xmlDoc = parser.parseFromString(text, 'text/xml');
-                    
-                    if (xmlDoc.getElementsByTagName('parsererror').length > 0) {
-                        throw new Error('Invalid XML format');
-                    }
-
-                    this.data = this.parseXMLData(xmlDoc);
-                    this.updateStats();
-                    this.showControls(true);
-                    this.createVisualization();
-                    
-                } catch (error) {
-                    console.error('Error processing file:', error);
-                    this.showError('Failed to process the XML file.');
-                } finally {
-                    this.showLoading(false);
-                }
-            }
-
-            parseXMLData(xmlDoc) {
-                const items = xmlDoc.getElementsByTagName('item');
-                const nodes = new Map();
-                const links = [];
-                const stats = { hosts: new Set(), requests: 0, parameters: 0, methods: new Set() };
-
-                for (let item of items) {
-                    const host = item.getElementsByTagName('host')[0]?.textContent;
-                    const path = item.getElementsByTagName('path')[0]?.textContent;
-                    const method = item.getElementsByTagName('method')[0]?.textContent;
-                    const url = item.getElementsByTagName('url')[0]?.textContent;
-
-                    if (!host || !path || !method || !url) continue;
-
-                    stats.hosts.add(host);
-                    stats.methods.add(method);
-                    stats.requests++;
-
-                    // Add host node
-                    if (!nodes.has(host)) {
-                        nodes.set(host, {
-                            id: host,
-                            type: 'host',
-                            label: host,
-                            size: 20,
-                            color: this.colors.host,
-                            degree: 0
-                        });
-                    }
-
-                    // Add request node
-                    const requestId = `${host}${path}`;
-                    if (!nodes.has(requestId)) {
-                        nodes.set(requestId, {
-                            id: requestId,
-                            type: 'request',
-                            label: path,
-                            size: 15,
-                            color: this.colors.request,
-                            method: method,
-                            degree: 0
-                        });
-
-                        links.push({
-                            source: host,
-                            target: requestId,
-                            type: 'host-request',
-                            method: method
-                        });
-                    }
-
-                    // Extract parameters
-                    try {
-                        const urlObj = new URL(url);
-                        for (let [key, value] of urlObj.searchParams.entries()) {
-                            const paramId = `${key}=${value}`;
-                            stats.parameters++;
-                            
-                            if (!nodes.has(paramId)) {
-                                nodes.set(paramId, {
-                                    id: paramId,
-                                    type: 'parameter',
-                                    label: `${key}=${value}`,
-                                    size: 10,
-                                    color: this.colors.parameter,
-                                    degree: 0
-                                });
-                            }
-
-                            links.push({
-                                source: requestId,
-                                target: paramId,
-                                type: 'request-param'
-                            });
-                        }
-                    } catch (e) {
-                        // Skip invalid URLs
-                    }
-                }
-
-                // Calculate node degrees
-                links.forEach(link => {
-                    if (nodes.has(link.source)) nodes.get(link.source).degree++;
-                    if (nodes.has(link.target)) nodes.get(link.target).degree++;
-                });
-
-                this.stats = {
-                    hosts: stats.hosts.size,
-                    requests: stats.requests,
-                    parameters: stats.parameters,
-                    methods: stats.methods.size
-                };
-
-                return {
-                    nodes: Array.from(nodes.values()),
-                    links: links
-                };
-            }
-
-            updateStats() {
-                document.getElementById('hostsCount').textContent = this.stats.hosts;
-                document.getElementById('requestsCount').textContent = this.stats.requests;
-                document.getElementById('paramsCount').textContent = this.stats.parameters;
-                document.getElementById('methodsCount').textContent = this.stats.methods;
-            }
-
-            setupVisualization() {
-                // Wait for DOM to be ready and get actual dimensions
-                setTimeout(() => {
-                    const container = document.querySelector('.visualization-area');
-                    const rect = container.getBoundingClientRect();
-                    this.width = rect.width;
-                    this.height = rect.height;
-                    
-                    console.log('Container dimensions:', this.width, this.height); // Debug
-                    
-                    // No padding - use full space
-                    this.viewWidth = this.width;
-                    this.viewHeight = this.height;
-
-                    this.svg = d3.select('#networkSvg')
-                        .attr('width', this.width)
-                        .attr('height', this.height)
-                        .attr('viewBox', `0 0 ${this.width} ${this.height}`)
-                        .style('position', 'absolute')
-                        .style('top', '0')
-                        .style('left', '0');
-
-                    // Clear any existing content
-                    this.svg.selectAll('*').remove();
-
-                    // Add zoom behavior
-                    const zoom = d3.zoom()
-                        .scaleExtent([0.1, 4])
-                        .on('zoom', (event) => {
-                            this.svg.select('.zoom-group')
-                                .attr('transform', event.transform);
-                        });
-
-                    this.svg.call(zoom);
-
-                    // Create main group for zooming - no offset
-                    this.svg.append('g').attr('class', 'zoom-group');
-                }, 100);
-            }
-
-            createVisualization() {
-                if (!this.data.nodes.length) return;
-
-                // Clear existing visualization
-                this.svg.select('.zoom-group').selectAll('*').remove();
-
-                // Create simulation with full area usage
-                this.simulation = d3.forceSimulation(this.data.nodes)
-                    .force('link', d3.forceLink(this.data.links).id(d => d.id).strength(this.linkStrength))
-                    .force('charge', d3.forceManyBody().strength(-400))
-                    .force('center', d3.forceCenter(this.viewWidth / 2, this.viewHeight / 2))
-                    .force('collision', d3.forceCollide().radius(d => d.size + 8))
-                    .force('x', d3.forceX(this.viewWidth / 2).strength(0.1))
-                    .force('y', d3.forceY(this.viewHeight / 2).strength(0.1));
-
-                // Create links
-                this.linkElements = this.svg.select('.zoom-group')
-                    .append('g')
-                    .attr('class', 'links')
-                    .selectAll('.link')
-                    .data(this.data.links)
-                    .enter()
-                    .append('line')
-                    .attr('class', 'link')
-                    .style('stroke', '#64748b')
-                    .style('stroke-width', 1.5)
-                    .style('opacity', 0.6);
-
-                // Create nodes
-                this.nodeElements = this.svg.select('.zoom-group')
-                    .append('g')
-                    .attr('class', 'nodes')
-                    .selectAll('.node')
-                    .data(this.data.nodes)
-                    .enter()
-                    .append('g')
-                    .attr('class', 'node')
-                    .call(d3.drag()
-                        .on('start', this.dragstarted.bind(this))
-                        .on('drag', this.dragged.bind(this))
-                        .on('end', this.dragended.bind(this)));
-
-                // Add circles to nodes
-                this.nodeElements.append('circle')
-                    .attr('r', d => d.size * (this.nodeScale / 15))
-                    .style('fill', d => d.color)
-                    .style('stroke', '#ffffff')
-                    .style('stroke-width', 2)
-                    .style('filter', 'drop-shadow(0px 2px 4px rgba(0,0,0,0.3))');
-
-                // Add labels
-                this.nodeElements.append('text')
-                    .attr('class', 'node-label')
-                    .attr('dy', d => d.size * (this.nodeScale / 15) + 15)
-                    .text(d => d.label.length > 20 ? d.label.substring(0, 20) + '...' : d.label)
-                    .style('font-size', '10px')
-                    .style('text-anchor', 'middle')
-                    .style('fill', '#ffffff')
-                    .style('text-shadow', '0 0 4px rgba(0,0,0,0.8)');
-
-                // Add tooltip
-                this.addTooltip();
-
-                // Start simulation
-                this.simulation.on('tick', this.ticked.bind(this));
-
-                // Show legend
-                document.getElementById('legend').style.display = 'block';
-                document.getElementById('statsSection').style.display = 'block';
-            }
-
-            addTooltip() {
-                const tooltip = d3.select('body').append('div')
-                    .attr('class', 'tooltip')
-                    .style('opacity', 0);
-
-                this.nodeElements
-                    .on('mouseover', (event, d) => {
-                        tooltip.transition().duration(200).style('opacity', 1);
-                        tooltip.html(this.getTooltipContent(d))
-                            .style('left', (event.pageX + 10) + 'px')
-                            .style('top', (event.pageY - 10) + 'px');
-                    })
-                    .on('mouseout', () => {
-                        tooltip.transition().duration(200).style('opacity', 0);
-                    });
-            }
-
-            getTooltipContent(d) {
-                let content = `<strong>${d.label}</strong><br>Type: ${d.type}<br>Connections: ${d.degree}`;
-                if (d.method) content += `<br>Method: ${d.method}`;
-                return content;
-            }
-
-            ticked() {
-                this.linkElements
-                    .attr('x1', d => d.source.x)
-                    .attr('y1', d => d.source.y)
-                    .attr('x2', d => d.target.x)
-                    .attr('y2', d => d.target.y);
-
-                this.nodeElements
-                    .attr('transform', d => `translate(${d.x},${d.y})`);
-            }
-
-            dragstarted(event, d) {
-                if (!event.active) this.simulation.alphaTarget(0.3).restart();
-                d.fx = d.x;
-                d.fy = d.y;
-            }
-
-            dragged(event, d) {
-                d.fx = event.x;
-                d.fy = event.y;
-            }
-
-            dragended(event, d) {
-                if (!event.active) this.simulation.alphaTarget(0);
-                d.fx = null;
-                d.fy = null;
-            }
-
-            updateVisualization() {
-                if (!this.nodeElements) return;
-                
-                this.nodeElements.select('circle')
-                    .attr('r', d => d.size * (this.nodeScale / 15));
-                
-                this.nodeElements.select('text')
-                    .attr('dy', d => d.size * (this.nodeScale / 15) + 15);
-            }
-
-            restartSimulation() {
-                if (this.simulation) {
-                    this.simulation
-                        .force('link').strength(this.linkStrength);
-                    this.simulation.alpha(1).restart();
-                }
-            }
-
-            applyFilter() {
-                if (!this.nodeElements) return;
-
-                this.nodeElements
-                    .style('opacity', d => {
-                        if (this.activeFilter === 'all') return 1;
-                        return d.type === this.activeFilter ? 1 : 0.2;
-                    });
-
-                this.linkElements
-                    .style('opacity', d => {
-                        if (this.activeFilter === 'all') return 0.6;
-                        const sourceNode = this.data.nodes.find(n => n.id === d.source.id || n.id === d.source);
-                        const targetNode = this.data.nodes.find(n => n.id === d.target.id || n.id === d.target);
-                        
-                        if (this.activeFilter === 'host') {
-                            return (sourceNode?.type === 'host' || targetNode?.type === 'host') ? 0.6 : 0.1;
-                        }
-                        if (this.activeFilter === 'request') {
-                            return (sourceNode?.type === 'request' || targetNode?.type === 'request') ? 0.6 : 0.1;
-                        }
-                        return 0.1;
-                    });
-            }
-
-            changeLayout() {
-                if (!this.simulation) return;
-
-                switch (this.currentLayout) {
-                    case 'force':
-                        this.setupForceLayout();
-                        break;
-                    case 'hierarchical':
-                        this.setupHierarchicalLayout();
-                        break;
-                    case 'circular':
-                        this.setupCircularLayout();
-                        break;
-                }
-            }
-
-            setupForceLayout() {
-                this.simulation
-                    .force('charge', d3.forceManyBody().strength(-400))
-                    .force('center', d3.forceCenter(this.viewWidth / 2, this.viewHeight / 2))
-                    .force('collision', d3.forceCollide().radius(d => d.size + 8))
-                    .force('x', d3.forceX(this.viewWidth / 2).strength(0.1))
-                    .force('y', d3.forceY(this.viewHeight / 2).strength(0.1))
-                    .alpha(1)
-                    .restart();
-            }
-
-            setupHierarchicalLayout() {
-                // Create hierarchy using full available space
-                const hosts = this.data.nodes.filter(n => n.type === 'host');
-                const requests = this.data.nodes.filter(n => n.type === 'request');
-                const parameters = this.data.nodes.filter(n => n.type === 'parameter');
-
-                const margin = 40;
-                const usableWidth = this.viewWidth - (margin * 2);
-                const usableHeight = this.viewHeight - (margin * 2);
-
-                // Position hosts at top - spread across full width
-                hosts.forEach((node, i) => {
-                    node.fx = margin + (usableWidth / Math.max(hosts.length - 1, 1)) * i;
-                    node.fy = margin;
-                });
-
-                // Position requests in middle - spread across full width
-                requests.forEach((node, i) => {
-                    node.fx = margin + (usableWidth / Math.max(requests.length - 1, 1)) * i;
-                    node.fy = this.viewHeight / 2;
-                });
-
-                // Position parameters at bottom - spread across full width
-                parameters.forEach((node, i) => {
-                    node.fx = margin + (usableWidth / Math.max(parameters.length - 1, 1)) * i;
-                    node.fy = usableHeight + margin;
-                });
-
-                this.simulation.alpha(1).restart();
-            }
-
-            setupCircularLayout() {
-                // Use larger radius to fill more space
-                const radius = Math.min(this.viewWidth, this.viewHeight) * 0.4;
-                const centerX = this.viewWidth / 2;
-                const centerY = this.viewHeight / 2;
-
-                this.data.nodes.forEach((node, i) => {
-                    const angle = (2 * Math.PI * i) / this.data.nodes.length;
-                    node.fx = centerX + radius * Math.cos(angle);
-                    node.fy = centerY + radius * Math.sin(angle);
-                });
-
-                this.simulation.alpha(1).restart();
-            }
-
-            showLoading(show) {
-                document.getElementById('loading').classList.toggle('hidden', !show);
-            }
-
-            showControls(show) {
-                document.getElementById('controlsSection').style.display = show ? 'block' : 'none';
-            }
-
-            showError(message) {
-                alert(message); // Simple error handling - could be enhanced
-            }
-
-            handleResize() {
-                const container = document.querySelector('.visualization-area');
-                const rect = container.getBoundingClientRect();
-                this.width = rect.width;
-                this.height = rect.height;
-                
-                // Minimal padding for full space usage
-                this.padding = 20;
-                this.viewWidth = this.width - (this.padding * 2);
-                this.viewHeight = this.height - (this.padding * 2);
-
-                this.svg
-                    .attr('width', this.width)
-                    .attr('height', this.height)
-                    .style('width', '100%')
-                    .style('height', '100%');
-                
-                // Update zoom group transform
-                this.svg.select('.zoom-group')
-                    .attr('transform', `translate(${this.padding}, ${this.padding})`);
-
-                if (this.simulation) {
-                    this.simulation
-                        .force('center', d3.forceCenter(this.viewWidth / 2, this.viewHeight / 2))
-                        .force('x', d3.forceX(this.viewWidth / 2).strength(0.1))
-                        .force('y', d3.forceY(this.viewHeight / 2).strength(0.1))
-                        .alpha(0.3)
-                        .restart();
-                }
-            }
+        }).observe(container);
+
+        this.setupUploadHandlers();
+        
+        document.getElementById('spacingSlider').addEventListener('input', (e) => {
+            document.getElementById('spacing-val').innerText = e.target.value;
+            this.updateForces();
+        });
+    }
+
+    setupUploadHandlers() {
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => this.handleFile(e.target.files[0]));
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) this.handleFile(e.dataTransfer.files[0]);
+        });
+    }
+
+    async handleFile(file) {
+        if (!file || !file.name.endsWith('.xml')) {
+            alert('Please upload a valid Burp Suite XML file.');
+            return;
+        }
+        const text = await file.text();
+        this.parseXML(text);
+    }
+
+    parseXML(xmlString) {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+        
+        if (xmlDoc.getElementsByTagName('parsererror').length) {
+            alert('Error parsing XML. File might be corrupted.');
+            return;
         }
 
-        // Initialize the application
-        document.addEventListener('DOMContentLoaded', () => {
-            new EliteNetworkAnalyzer();
+        const items = xmlDoc.getElementsByTagName('item');
+        const nodes = new Map();
+        const links = [];
+        let stats = { hosts: 0, reqs: 0, params: 0 };
+
+        const getText = (parent, tag) => {
+            const el = parent.getElementsByTagName(tag)[0];
+            return el ? el.textContent : null;
+        };
+
+        Array.from(items).forEach(item => {
+            const urlStr = getText(item, 'url');
+            const host = getText(item, 'host');
+            const method = getText(item, 'method') || 'GET';
+            const status = getText(item, 'status') || '0';
+            
+            if (!urlStr || !host) return;
+
+            // Host
+            if (!nodes.has(host)) {
+                nodes.set(host, { 
+                    id: host, 
+                    type: 'host', 
+                    radius: 20, 
+                    label: host,
+                    data: { count: 0 },
+                    // Init position at center to prevent explosion
+                    x: this.width/2 + (Math.random() - 0.5) * 10,
+                    y: this.height/2 + (Math.random() - 0.5) * 10
+                });
+                stats.hosts++;
+            }
+            nodes.get(host).data.count++;
+
+            // Request
+            try {
+                const urlObj = new URL(urlStr);
+                const path = urlObj.pathname;
+                const reqId = `${method}|${host}${path}`;
+
+                if (!nodes.has(reqId)) {
+                    nodes.set(reqId, {
+                        id: reqId,
+                        type: 'request',
+                        subtype: method,
+                        radius: 12,
+                        label: path,
+                        data: { method, url: urlStr, status, host },
+                        x: this.width/2,
+                        y: this.height/2
+                    });
+                    stats.reqs++;
+                    links.push({ source: host, target: reqId, type: 'host-req' });
+                }
+
+                // Params
+                urlObj.searchParams.forEach((val, key) => {
+                    const paramId = `${reqId}?${key}`;
+                    if (!nodes.has(paramId)) {
+                        nodes.set(paramId, {
+                            id: paramId,
+                            type: 'param',
+                            radius: 6,
+                            label: key,
+                            data: { value: val, parentReq: reqId },
+                            x: this.width/2,
+                            y: this.height/2
+                        });
+                        stats.params++;
+                        links.push({ source: reqId, target: paramId, type: 'req-param' });
+                    }
+                });
+            } catch (e) {}
         });
-    </script>
+
+        document.getElementById('count-hosts').innerText = stats.hosts;
+        document.getElementById('count-reqs').innerText = stats.reqs;
+        document.getElementById('count-params').innerText = stats.params;
+
+        this.data = { nodes: Array.from(nodes.values()), links: links };
+        this.updateGraph();
+        
+        // Auto fit after a delay to let layout settle
+        setTimeout(() => this.autoFit(), 600);
+    }
+
+    toggleMethod(method, btn) {
+        if (this.filters.methods.has(method)) {
+            this.filters.methods.delete(method);
+            btn.classList.remove('active');
+        } else {
+            this.filters.methods.add(method);
+            btn.classList.add('active');
+        }
+        this.updateGraph();
+    }
+
+    applyFilters() {
+        this.filters.host = document.getElementById('filter-host').value.toLowerCase();
+        this.filters.path = document.getElementById('filter-path').value.toLowerCase();
+        this.filters.status = document.getElementById('filter-status').value;
+        this.filters.param = document.getElementById('filter-param').value.toLowerCase();
+        this.updateGraph();
+        setTimeout(() => this.autoFit(), 300);
+    }
+
+    resetFilters() {
+        this.filters = {
+            host: '', path: '', status: '', param: '',
+            methods: new Set(['GET', 'POST', 'PUT', 'DELETE'])
+        };
+        ['filter-host','filter-path','filter-status','filter-param'].forEach(id => document.getElementById(id).value = '');
+        document.querySelectorAll('.method-btn').forEach(btn => btn.classList.add('active'));
+        this.updateGraph();
+        setTimeout(() => this.autoFit(), 300);
+    }
+
+    getFilteredData() {
+        const { host, path, status, param, methods } = this.filters;
+        const visibleNodeIds = new Set();
+        const requestNodeIds = new Set();
+        const finalNodes = [];
+
+        // 1. Identify Valid Requests
+        this.data.nodes.forEach(n => {
+            if (n.type === 'request') {
+                const isMethodValid = methods.has(n.subtype) || (['GET','POST','PUT'].indexOf(n.subtype) === -1 && methods.has('DELETE'));
+                const matchesHost = n.data.host.toLowerCase().includes(host);
+                const matchesPath = n.label.toLowerCase().includes(path);
+                const matchesStatus = n.data.status.includes(status);
+                
+                if (isMethodValid && matchesHost && matchesPath && matchesStatus) {
+                    requestNodeIds.add(n.id);
+                }
+            }
+        });
+
+        // 2. Build visible set based on relationships
+        this.data.nodes.forEach(n => {
+            if (n.type === 'request') {
+                if (requestNodeIds.has(n.id)) {
+                    if(param === '') {
+                        visibleNodeIds.add(n.id);
+                        finalNodes.push(n);
+                    }
+                }
+            }
+            else if (n.type === 'param') {
+                if (requestNodeIds.has(n.data.parentReq) && n.label.toLowerCase().includes(param)) {
+                    visibleNodeIds.add(n.id);
+                    visibleNodeIds.add(n.data.parentReq); // Force parent visible
+                    finalNodes.push(n);
+                }
+            }
+            else if (n.type === 'host') {
+                // Keep hosts that have visible children or match text filter
+                const hasVisibleChildren = Array.from(visibleNodeIds).some(id => id.includes(n.id));
+                const nameMatches = n.label.toLowerCase().includes(host);
+                if ((host !== '' && nameMatches) || hasVisibleChildren) {
+                    visibleNodeIds.add(n.id);
+                    finalNodes.push(n);
+                }
+            }
+        });
+
+        // 3. Re-add requests if they were enabled by param match
+        if(param !== '') {
+            this.data.nodes.forEach(n => {
+                if(n.type === 'request' && visibleNodeIds.has(n.id) && !finalNodes.includes(n)) {
+                    finalNodes.push(n);
+                }
+            });
+        }
+
+        const finalLinks = this.data.links.filter(l => 
+            visibleNodeIds.has(typeof l.source === 'object' ? l.source.id : l.source) && 
+            visibleNodeIds.has(typeof l.target === 'object' ? l.target.id : l.target)
+        );
+
+        return { nodes: finalNodes, links: finalLinks };
+    }
+
+    updateGraph() {
+        if(this.simulation) this.simulation.stop();
+        this.g.selectAll("*").remove();
+
+        const filtered = this.getFilteredData();
+        
+        if (this.layout === 'force') {
+            this.renderForceLayout(filtered.nodes, filtered.links);
+        } else {
+            this.renderHierarchicalLayout(filtered.nodes, filtered.links);
+        }
+    }
+
+    renderForceLayout(nodes, links) {
+        const spacing = parseInt(document.getElementById('spacingSlider').value);
+
+        // Stronger gravity to center, stronger radial pull to keep them in a block
+        this.simulation = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links).id(d => d.id).distance(l => l.type === 'host-req' ? spacing * 1.5 : spacing * 0.6))
+            .force("charge", d3.forceManyBody().strength(-300)) // Strong repulsion for spacing
+            .force("collide", d3.forceCollide().radius(d => d.radius * 1.4))
+            .force("center", d3.forceCenter(this.width / 2, this.height / 2))
+            // This is the magic force that keeps them in a "block"/cluster
+            .force("radial", d3.forceRadial(100, this.width/2, this.height/2).strength(0.8));
+
+        this.drawElements(nodes, links);
+
+        this.simulation.on("tick", () => {
+            this.g.selectAll(".link")
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+
+            this.g.selectAll(".node")
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+    }
+
+    renderHierarchicalLayout(nodes, links) {
+        if(nodes.length === 0) return;
+
+        const forest = { id: "ROOT", children: [] };
+        const hostMap = new Map();
+        
+        nodes.filter(n => n.type === 'host').forEach(h => {
+            h.children = [];
+            hostMap.set(h.id, h);
+            forest.children.push(h);
+        });
+
+        const reqMap = new Map();
+        nodes.filter(n => n.type === 'request').forEach(req => {
+            req.children = [];
+            reqMap.set(req.id, req);
+            const parent = hostMap.get(req.data.host);
+            if(parent) parent.children.push(req);
+            else forest.children.push(req);
+        });
+
+        nodes.filter(n => n.type === 'param').forEach(param => {
+            const parent = reqMap.get(param.data.parentReq);
+            if(parent) parent.children.push(param);
+        });
+
+        const root = d3.hierarchy(forest);
+        const spacing = parseInt(document.getElementById('spacingSlider').value);
+        
+        let treeLayout;
+        if (this.layout === 'radial') {
+            const radius = Math.min(this.width, this.height) / 2 * 0.8;
+            treeLayout = d3.tree().size([2 * Math.PI, radius]).separation((a, b) => (a.parent == b.parent ? 1 : 2) / a.depth);
+        } else {
+            // Tighter vertical layout
+            treeLayout = d3.tree().size([this.height, this.width - 250]).nodeSize([25, spacing * 3]);
+        }
+
+        treeLayout(root);
+        const computedNodes = root.descendants().slice(1);
+        const computedLinks = root.links().filter(l => l.source.data.id !== 'ROOT');
+
+        if (this.layout === 'radial') {
+            computedNodes.forEach(d => {
+                d.x = d.y * Math.cos(d.x - Math.PI / 2) + this.width / 2;
+                d.y = d.y * Math.sin(d.x - Math.PI / 2) + this.height / 2;
+                d.data.x = d.x; d.data.y = d.y;
+            });
+        } else {
+            computedNodes.forEach(d => {
+                const temp = d.x;
+                d.x = d.y + 100; // Left padding
+                d.y = temp + this.height/2; 
+                d.data.x = d.x; d.data.y = d.y;
+            });
+        }
+
+        const renderLinks = computedLinks.map(l => ({ source: l.source.data, target: l.target.data, type: l.target.data.type === 'param' ? 'req-param' : 'host-req' }));
+        const renderNodes = computedNodes.map(n => n.data);
+        
+        this.drawElements(renderNodes, renderLinks);
+        
+        this.g.selectAll(".link")
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
+
+        this.g.selectAll(".node")
+            .attr("transform", d => `translate(${d.x},${d.y})`);
+        
+        // Auto fit tree layouts immediately
+        this.autoFit(true);
+    }
+
+    drawElements(nodes, links) {
+        const linkElements = this.g.selectAll(".link")
+            .data(links)
+            .enter().append("line")
+            .attr("class", "link")
+            .attr("marker-end", d => d.type === 'host-req' ? "url(#arrowhead)" : "")
+            .attr("stroke-width", d => d.type === 'host-req' ? 2 : 1);
+
+        const nodeElements = this.g.selectAll(".node")
+            .data(nodes)
+            .enter().append("g")
+            .attr("class", "node")
+            .call(d3.drag()
+                .on("start", (event, d) => {
+                    if(this.layout !== 'force') return;
+                    if (!event.active) this.simulation.alphaTarget(0.3).restart();
+                    d.fx = d.x;
+                    d.fy = d.y;
+                })
+                .on("drag", (event, d) => {
+                    if(this.layout !== 'force') return;
+                    d.fx = event.x;
+                    d.fy = event.y;
+                })
+                .on("end", (event, d) => {
+                    if(this.layout !== 'force') return;
+                    if (!event.active) this.simulation.alphaTarget(0);
+                    d.fx = null;
+                    d.fy = null;
+                })
+            )
+            .on("mouseover", (e, d) => this.showTooltip(e, d))
+            .on("mouseout", () => this.hideTooltip());
+
+        nodeElements.append("circle")
+            .attr("r", d => d.radius)
+            .attr("fill", d => {
+                if (d.type === 'host') return this.colors.host;
+                if (d.type === 'param') return this.colors.param;
+                return this.colors[d.subtype] || this.colors.default;
+            });
+
+        nodeElements.append("text")
+            .attr("dx", d => d.radius + 5)
+            .attr("dy", 4)
+            .text(d => d.type === 'param' ? '' : (d.label.length > 25 ? d.label.substring(0, 22) + '...' : d.label));
+    }
+
+    updateForces() {
+        if (this.simulation) {
+            const spacing = parseInt(document.getElementById('spacingSlider').value);
+            this.simulation.force("link").distance(l => l.type === 'host-req' ? spacing * 1.5 : spacing * 0.6);
+            this.simulation.alpha(0.3).restart();
+        } else if (this.layout !== 'force') {
+            this.updateGraph();
+        }
+    }
+
+    setLayout(mode, btn) {
+        this.layout = mode;
+        const group = btn.parentElement;
+        group.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.updateGraph();
+        
+        // Hide/Show Spacing slider based on layout
+        // Tree layout doesn't use physics spacing the same way, but we kept it for nodeSize
+    }
+
+    // --- KEY FEATURE: AUTO FIT ---
+    autoFit(animate = true) {
+        // Calculate Bounding Box of the Group
+        const bounds = this.g.node().getBBox();
+        const parent = this.svg.node().parentElement;
+        const fullWidth = parent.clientWidth;
+        const fullHeight = parent.clientHeight;
+        
+        const width = bounds.width;
+        const height = bounds.height;
+        const midX = bounds.x + width / 2;
+        const midY = bounds.y + height / 2;
+
+        if (width === 0 || height === 0) return; // Empty
+
+        const scale = 0.85 / Math.max(width / fullWidth, height / fullHeight);
+        const translate = [fullWidth / 2 - scale * midX, fullHeight / 2 - scale * midY];
+
+        const t = d3.zoomIdentity
+            .translate(translate[0], translate[1])
+            .scale(scale);
+
+        if(animate) {
+            this.svg.transition().duration(750).call(this.zoom.transform, t);
+        } else {
+            this.svg.call(this.zoom.transform, t);
+        }
+    }
+
+    showTooltip(event, d) {
+        const tooltip = document.getElementById('tooltip');
+        let content = `<div class="tt-title">${d.type.toUpperCase()}</div>`;
+        
+        if (d.type === 'host') {
+            content += `
+                <div class="tt-row"><span>Host:</span> <span class="tt-val">${d.id}</span></div>
+                <div class="tt-row"><span>Reqs:</span> <span class="tt-val">${d.data.count}</span></div>
+            `;
+        } else if (d.type === 'request') {
+            content += `
+                <div class="tt-row"><span>Method:</span> <span class="tt-val" style="color:${this.colors[d.subtype]}">${d.subtype}</span></div>
+                <div class="tt-row"><span>Path:</span> <span class="tt-val">${d.label}</span></div>
+                <div class="tt-row"><span>Status:</span> <span class="tt-val">${d.data.status}</span></div>
+            `;
+        } else if (d.type === 'param') {
+            content += `
+                <div class="tt-row"><span>Param:</span> <span class="tt-val">${d.label}</span></div>
+                <div class="tt-row"><span>Value:</span> <span class="tt-val">${d.data.value}</span></div>
+            `;
+        }
+
+        tooltip.innerHTML = content;
+        tooltip.style.opacity = 1;
+        tooltip.style.left = (event.pageX + 15) + 'px';
+        tooltip.style.top = (event.pageY + 15) + 'px';
+    }
+
+    hideTooltip() {
+        document.getElementById('tooltip').style.opacity = 0;
+    }
+}
+
+const app = new BurpVisualizer();
+</script>
+
 </body>
 </html>
